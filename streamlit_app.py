@@ -139,8 +139,10 @@ cols = st.columns(len(df))
 # Display player cards with images, names, and points
 for idx, (col, (_, row)) in enumerate(zip(cols, df.iterrows())):
     with col:
-        # Select URL based on points ranking
-        if row['Points'] == min_points:
+        ## Select URL based on benched status first, then points ranking
+        if row['Name'] in benched_players:
+            url = row['benched_URL']
+        elif row['Points'] == min_points:
             url = row['sad_URL']
         elif row['Points'] == max_points:
             url = row['happy_URL']
@@ -180,7 +182,7 @@ for idx, (col, (_, row)) in enumerate(zip(cols, df.iterrows())):
 #            </div>
 #            """, unsafe_allow_html=True)
 
-st.write("---")
+#st.write("---")
 # Load Match Data specifically from the 'Matches' worksheet
 
 # --- 2. MATCH HISTORY DISPLAY ---
