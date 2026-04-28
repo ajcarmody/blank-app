@@ -49,8 +49,8 @@ st.markdown("""
     /* Player Cards styling */
     .player-card {
         border: 4px solid #F5B201;
-        padding: 15px;
-        border-radius: 10px;
+        padding: 5px;
+        border-radius: 5px;
         background-color: rgba(255, 255, 255, 0.1);
         margin-bottom: 20px;
     }
@@ -72,7 +72,7 @@ st.markdown("""
 
     .match-table th, .match-table td {
         border: 2px solid #F5B201;
-        padding: 10px;
+        padding: 2px;
         text-align: center;
         background-color: rgba(255, 255, 255, 0.1);
     }
@@ -98,6 +98,41 @@ from PIL import Image, ImageOps
 min_points = df['Points'].min()
 max_points = df['Points'].max()
 
+# Determine benched players from match data
+benched_players = set()
+try:
+    conn2 = st.connection("gsheets_matches", type=GSheetsConnection)
+    dfm = conn2.read()
+    pivot_df = dfm.pivot(
+        index=['Game_ID', 'Game_Title', 'Round_No'], 
+        columns='Player_Name', 
+        values='Score'
+    ).reset_index()
+    pivot_df.columns.name = None
+    pivot_df = pivot_df.fillna("")
+
+    player_cols = pivot_df.columns[3:]
+
+    def has_numeric_values(row):
+        return any(pd.to_numeric(row[player_cols], errors='coerce').notna())
+
+    # Check first row: if no numbers entered, use B to identify benched players
+    if len(pivot_df) > 0:
+        first_row = pivot_df.iloc[0]
+        if not has_numeric_values(first_row):
+            benched = [col for col in player_cols if str(first_row[col]).strip().upper() == 'B']
+            benched_players.update(benched)
+
+    # Check subsequent rows using transition logic
+    for i in range(1, len(pivot_df)):
+        prev_row = pivot_df.iloc[i - 1]
+        current_row = pivot_df.iloc[i]
+        if has_numeric_values(prev_row) and not has_numeric_values(current_row):
+            benched = [col for col in player_cols if str(current_row[col]).strip().upper() == 'B']
+            benched_players.update(benched)
+except Exception as e:
+    pass  # Silently ignore if match data fails
+
 # Create a row of columns based on the number of players
 cols = st.columns(len(df))
 
@@ -119,6 +154,10 @@ for idx, (col, (_, row)) in enumerate(zip(cols, df.iterrows())):
                 img_bytes = download_image_bytes(url)
                 img = Image.open(BytesIO(img_bytes))
                 img = ImageOps.fit(img.convert("RGB"), (175, 250), Image.LANCZOS)
+
+                if row['Name'] in benched_players:
+                    img = ImageOps.grayscale(img).convert("RGB")
+
                 st.image(img, width=250)
             except Exception as e:
                 st.error(f"Error: {str(e)}")
@@ -147,63 +186,37 @@ st.write("---")
 # --- 2. MATCH HISTORY DISPLAY ---
 st.subheader("🕹️ MATCH SCHEDULE & RESULTS")
 
-# OPTION A: Clean, readable table (The standard way)
-# This respects your retro font if you have the CSS from the previous step active
-#st.table(match_df)
-
-
-# Create a connection object.
-#conn = st.connection("gsheets_players", type=GSheetsConnection)
-
-#df = conn.read()
-
-# Print results.
-#st.dataframe(df)
-
-# Create a connection object.
-conn2 = st.connection("gsheets_matches", type=GSheetsConnection)
-
-dfm = conn2.read()
-
-# Print results.
-#st.dataframe(dfm)
-
 try:
-    # 3. Pivot the data to create columns for each unique player
-    # index: The rows (Game and Round)
-    # columns: Every unique name found in 'Player_Name' becomes a header
-    # values: The actual score/result entered for that round
-    pivot_df = dfm.pivot(
-        index=['Game_Title', 'Round_No'], 
-        columns='Player_Name', 
-        values='Score'
-    ).reset_index()
-
-    # 4. Clean up the dataframe for display
-    pivot_df.columns.name = None  # Remove the 'Player_Name' header from the columns axis
-    pivot_df = pivot_df.fillna("-") # Replace empty rounds with a dash for readability
-
-    # 5. Display the output as styled HTML table
+    # Display the output as styled HTML table
     # Build HTML table
     html_table = '<table class="match-table">'
     
-    # Header row
+    # Header row (exclude Game_ID)
     html_table += '<tr>'
     for col in pivot_df.columns:
-        html_table += f'<th>{col}</th>'
+        if col != 'Game_ID':
+            html_table += f'<th>{col}</th>'
     html_table += '</tr>'
     
-    # Data rows
+    # Data rows (exclude Game_ID)
     for _, row in pivot_df.iterrows():
         html_table += '<tr>'
         for col in pivot_df.columns:
-            value = row[col]
-            html_table += f'<td>{value}</td>'
+            if col != 'Game_ID':
+                value = row[col]
+                html_table += f'<td>{value}</td>'
         html_table += '</tr>'
     
     html_table += '</table>'
     
     st.markdown(html_table, unsafe_allow_html=True)
+
+    # Show benched messages
+    if benched_players:
+        names = ', '.join(sorted(benched_players))
+        st.write(f"Currently benched player(s): {names}")
+    else:
+        st.write("No current benched player detected.")
 
     # Optional: Add a sidebar filter for Games
     #all_games = ["All"] + sorted(df["Game_Title"].unique().tolist())
