@@ -4,7 +4,7 @@ from streamlit_gsheets import GSheetsConnection
 from datetime import datetime
 import pandas as pd
 
-st_autorefresh(interval=60000)  # Refresh every 60 seconds
+#st_autorefresh(interval=60000)  # Refresh every 60 seconds
 st.set_page_config(page_title="N64 LEADERBOARD", layout="wide")
 
 # Cache downloaded image bytes so the app is faster on reruns
