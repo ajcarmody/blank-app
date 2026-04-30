@@ -1,8 +1,10 @@
 import streamlit as st
+from streamlit_autorefresh import st_autorefresh
 from streamlit_gsheets import GSheetsConnection
 from datetime import datetime
 import pandas as pd
 
+st_autorefresh(interval=60000)  # Refresh every 60 seconds
 st.set_page_config(page_title="N64 LEADERBOARD", layout="wide")
 
 # Cache downloaded image bytes so the app is faster on reruns
@@ -14,11 +16,13 @@ def download_image_bytes(url):
     return response.content
 
 # 1. Setup Connection
-conn = st.connection("gsheets", type=GSheetsConnection)
+conn = st.connection("gsheets_players", type=GSheetsConnection)
+#conn = st.connection("gsheets", type=GSheetsConnection)
 
 # 2. Read Data (Replace with your actual public URL)
 # Hint: Ensure your Sheet has columns: Name, Points, Bio, Image_URL, Game_Played, Result
-df = conn.read(spreadsheet="https://docs.google.com/spreadsheets/d/1ns0sXbWEQtfNcPQ8HZ6tYLyQYCdtDdQb6cVLqbUZdwM/edit?usp=sharing", ttl="0") 
+#df = conn.read(spreadsheet="https://docs.google.com/spreadsheets/d/1ns0sXbWEQtfNcPQ8HZ6tYLyQYCdtDdQb6cVLqbUZdwM/edit?usp=sharing", ttl="0") 
+df = conn.read(ttl="0")
 
 # 3. Custom CSS for the N64 "Vibe"
 st.markdown("""
