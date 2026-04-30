@@ -98,6 +98,9 @@ from PIL import Image, ImageOps
 min_points = df['Points'].min()
 max_points = df['Points'].max()
 
+#first row check
+start_images = False
+
 # Determine benched players from match data
 benched_players = set()
 try:
@@ -111,7 +114,47 @@ try:
     pivot_df.columns.name = None
     pivot_df = pivot_df.fillna("")
 
-    player_cols = pivot_df.columns[3:]
+    player_cols = list(pivot_df.columns[3:])
+
+    # Collapse Game_ID groups into one Total row if all player columns are populated
+    collapsed_data = []
+    for game_id, group in pivot_df.groupby('Game_ID', sort=False):
+        if len(group) <= 1:
+            # Single row: keep as-is
+            collapsed_data.extend(group.values.tolist())
+        else:
+            # Multiple rows: check if all player columns are populated
+            has_empty = False
+            for col in player_cols:
+                for val in group[col].values:
+                    if pd.isna(val) or str(val).strip() == "":
+                        has_empty = True
+                        break
+                if has_empty:
+                    break
+            
+            if not has_empty:
+                # All populated: collapse into one Total row
+                total_row = group.iloc[0].copy()
+                total_row['Round_No'] = 'Total'
+                for col in player_cols:
+                    total = 0.0
+                    for val in group[col].values:
+                        val_str = str(val).strip().upper()
+                        if val_str == 'B':
+                            continue
+                        try:
+                            total += float(val)
+                        except (ValueError, TypeError):
+                            pass
+                    total_row[col] = int(total) if total == int(total) else total
+                collapsed_data.append(total_row.tolist())
+            else:
+                # Has empty cells: keep all rows
+                collapsed_data.extend(group.values.tolist())
+
+    pivot_df = pd.DataFrame(collapsed_data, columns=pivot_df.columns)
+    player_cols = list(pivot_df.columns[3:])
 
     def has_numeric_values(row):
         return any(pd.to_numeric(row[player_cols], errors='coerce').notna())
@@ -122,6 +165,7 @@ try:
         if not has_numeric_values(first_row):
             benched = [col for col in player_cols if str(first_row[col]).strip().upper() == 'B']
             benched_players.update(benched)
+            start_images = True
 
     # Check subsequent rows using transition logic
     for i in range(1, len(pivot_df)):
@@ -130,6 +174,7 @@ try:
         if has_numeric_values(prev_row) and not has_numeric_values(current_row):
             benched = [col for col in player_cols if str(current_row[col]).strip().upper() == 'B']
             benched_players.update(benched)
+            start_images = False
 except Exception as e:
     pass  # Silently ignore if match data fails
 
@@ -142,8 +187,10 @@ for idx, (col, (_, row)) in enumerate(zip(cols, df.iterrows())):
         ## Select URL based on benched status first, then points ranking
         if row['Name'] in benched_players:
             url = row['benched_URL']
+        elif row['Points'] == min_points and start_images:
+            url = row['neutral_URL']
         elif row['Points'] == min_points:
-            url = row['sad_URL']
+            url = row['sad_URL']    
         elif row['Points'] == max_points:
             url = row['happy_URL']
         else:
