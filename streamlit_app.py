@@ -11,7 +11,37 @@ st.set_page_config(page_title="N64 Leaderboard", layout="wide")
 st.markdown(
     """
     <style>
-    /* Target the main Streamlit container */
+    /* 1. Warp the main container to look slightly curved */
+    /*[data-testid="stAppViewContainer"] {
+        background-color: #050505; /* Deep black for the "bezel" area */
+    }*/
+
+    [data-testid="stAppViewBlockContainer"] {
+        background: #111; /* Slight screen tint */
+        border-radius: 40px; /* Rounds the corners of the screen */
+        padding: 2rem !important;
+        margin-top: 20px;
+        box-shadow: inset 0 0 100px rgba(0,0,0,0.5), 0 0 20px rgba(0,0,0,1);
+        /* Subtle bulge effect using perspective and scale */
+        transform: perspective(1000px) rotateX(0.5deg) scale(0.98);
+    }
+
+    /* 2. Add the "Vignette" and Glow overlay */
+    [data-testid="stAppViewContainer"]::after {
+        content: " ";
+        display: block;
+        position: fixed;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        right: 0;
+        /* Spherical gradient creates dark corners and a bright center */
+        background: radial-gradient(circle, rgba(18, 16, 16, 0) 40%, rgba(0, 0, 0, 0.4) 100%);
+        z-index: 999998; /* Just below the scanlines */
+        pointer-events: none;
+    }
+
+    /* 3. The Scanlines (Updated for the curve) */
     [data-testid="stAppViewContainer"]::before {
         content: " ";
         display: block;
@@ -20,18 +50,27 @@ st.markdown(
         left: 0;
         bottom: 0;
         right: 0;
-        background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%), 
-                    linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
+        background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.15) 50%);
         z-index: 999999;
-        background-size: 100% 4px, 3px 100%;
+        background-size: 100% 4px;
         pointer-events: none;
+        opacity: 0.6;
     }
+
+    img {
+        filter: blur(0.45px) brightness(1.1);
+        image-rendering: pixelated;
+    }  
+
+    body {
+        text-shadow: 0 0 3px #FFFFFF;
+    } 
     </style>
     """,
     unsafe_allow_html=True
 )
 #st_autorefresh(interval=60000)  # Refresh every 60 seconds
-st.set_page_config(page_title="N64 LEADERBOARD", layout="wide")
+#st.set_page_config(page_title="N64 LEADERBOARD", layout="wide")
 
 # Cache downloaded image bytes so the app is faster on reruns
 @st.cache_data(ttl=3600)
@@ -111,6 +150,7 @@ st.markdown("""
         background-color: rgba(245, 181, 1, 0.2);
         font-weight: bold;
     }
+            
     </style>
     """, unsafe_allow_html=True)
 
