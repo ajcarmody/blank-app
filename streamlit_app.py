@@ -69,8 +69,15 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
+# hide streamlit header and menu
+hide_header_style = """
+    <style>
+    header {visibility: hidden;}
+    </style>
+    """
+st.markdown(hide_header_style, unsafe_allow_html=True)
+
 #st_autorefresh(interval=60000)  # Refresh every 60 seconds
-#st.set_page_config(page_title="N64 LEADERBOARD", layout="wide")
 
 # Cache downloaded image bytes so the app is faster on reruns
 @st.cache_data(ttl=3600)
