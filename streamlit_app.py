@@ -4,6 +4,32 @@ from streamlit_gsheets import GSheetsConnection
 from datetime import datetime
 import pandas as pd
 
+# 1. Place this at the top of your script
+st.set_page_config(page_title="N64 Leaderboard", layout="wide")
+
+# 2. Inject the CSS
+st.markdown(
+    """
+    <style>
+    /* Target the main Streamlit container */
+    [data-testid="stAppViewContainer"]::before {
+        content: " ";
+        display: block;
+        position: fixed;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        right: 0;
+        background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%), 
+                    linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
+        z-index: 999999;
+        background-size: 100% 4px, 3px 100%;
+        pointer-events: none;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 #st_autorefresh(interval=60000)  # Refresh every 60 seconds
 st.set_page_config(page_title="N64 LEADERBOARD", layout="wide")
 
@@ -88,7 +114,8 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-st.title("🎮 N64 LEADERBOARD")
+#st.title("🎮 N64 LEADERBOARD")
+st.title("N64 LEADERBOARD")
 
 # --- 3. THE ROW DISPLAY ---
 st.subheader("CURRENT STANDINGS")
@@ -120,6 +147,35 @@ try:
 
     player_cols = list(pivot_df.columns[3:])
 
+    benched_players = set()
+    latest_benched = None
+    # Collect all rounds across games, sorted by Game_ID then Round_No
+    all_rounds = []
+    for game_id in dfm['Game_ID'].unique():
+        game_df = dfm[dfm['Game_ID'] == game_id]
+        rounds = sorted(game_df['Round_No'].unique())
+        for round_no in rounds:
+            all_rounds.append((game_id, round_no))
+    all_rounds.sort()  # Sort by game_id, round_no
+    
+    for idx, (game_id, round_no) in enumerate(all_rounds):
+        if idx == 0:
+            # For the first row in the table, use the benched player_status in that row
+            benched_in_current = dfm[(dfm['Game_ID'] == game_id) & (dfm['Round_No'] == round_no) & (dfm['Player_Status'] == 'benched')]['Player_Name']
+            if len(benched_in_current) == 1:
+                latest_benched = benched_in_current.iloc[0]
+        else:
+            # For subsequent rows, check if the previous row is populated with values
+            prev_game_id, prev_round_no = all_rounds[idx-1]
+            prev_active = dfm[(dfm['Game_ID'] == prev_game_id) & (dfm['Round_No'] == prev_round_no) & (dfm['Player_Status'] == 'active')]
+            if len(prev_active) > 0 and all(prev_active['Score'].notna() & (prev_active['Score'] != '')):
+                benched_in_current = dfm[(dfm['Game_ID'] == game_id) & (dfm['Round_No'] == round_no) & (dfm['Player_Status'] == 'benched')]['Player_Name']
+                if len(benched_in_current) == 1:
+                    latest_benched = benched_in_current.iloc[0]
+    benched_players = {latest_benched} if latest_benched else set()
+
+    start_images = len(benched_players) > 0
+
     # Collapse Game_ID groups into one Total row if all player columns are populated
     collapsed_data = []
     for game_id, group in pivot_df.groupby('Game_ID', sort=False):
@@ -127,11 +183,15 @@ try:
             # Single row: keep as-is
             collapsed_data.extend(group.values.tolist())
         else:
-            # Multiple rows: check if all player columns are populated
+            # Multiple rows: check if all scores for each round are populated where the user is active
             has_empty = False
-            for col in player_cols:
-                for val in group[col].values:
-                    if pd.isna(val) or str(val).strip() == "":
+            for _, row in group.iterrows():
+                game_id_check = row['Game_ID']
+                round_no_check = row['Round_No']
+                active_players = dfm[(dfm['Game_ID'] == game_id_check) & (dfm['Round_No'] == round_no_check) & (dfm['Player_Status'] == 'active')]['Player_Name'].unique()
+                for player in active_players:
+                    score_series = dfm[(dfm['Game_ID'] == game_id_check) & (dfm['Round_No'] == round_no_check) & (dfm['Player_Name'] == player)]['Score']
+                    if score_series.empty or pd.isna(score_series.iloc[0]) or str(score_series.iloc[0]).strip() == "":
                         has_empty = True
                         break
                 if has_empty:
@@ -142,11 +202,9 @@ try:
                 total_row = group.iloc[0].copy()
                 total_row['Round_No'] = 'Total'
                 for col in player_cols:
+                    active_scores = dfm[(dfm['Game_ID'] == game_id) & (dfm['Player_Name'] == col) & (dfm['Player_Status'] == 'active')]['Score']
                     total = 0.0
-                    for val in group[col].values:
-                        val_str = str(val).strip().upper()
-                        if val_str == 'B':
-                            continue
+                    for val in active_scores:
                         try:
                             total += float(val)
                         except (ValueError, TypeError):
@@ -159,26 +217,6 @@ try:
 
     pivot_df = pd.DataFrame(collapsed_data, columns=pivot_df.columns)
     player_cols = list(pivot_df.columns[3:])
-
-    def has_numeric_values(row):
-        return any(pd.to_numeric(row[player_cols], errors='coerce').notna())
-
-    # Check first row: if no numbers entered, use B to identify benched players
-    if len(pivot_df) > 0:
-        first_row = pivot_df.iloc[0]
-        if not has_numeric_values(first_row):
-            benched = [col for col in player_cols if str(first_row[col]).strip().upper() == 'B']
-            benched_players.update(benched)
-            start_images = True
-
-    # Check subsequent rows using transition logic
-    for i in range(1, len(pivot_df)):
-        prev_row = pivot_df.iloc[i - 1]
-        current_row = pivot_df.iloc[i]
-        if has_numeric_values(prev_row) and not has_numeric_values(current_row):
-            benched = [col for col in player_cols if str(current_row[col]).strip().upper() == 'B']
-            benched_players.update(benched)
-            start_images = False
 except Exception as e:
     pass  # Silently ignore if match data fails
 
@@ -237,7 +275,8 @@ for idx, (col, (_, row)) in enumerate(zip(cols, df.iterrows())):
 # Load Match Data specifically from the 'Matches' worksheet
 
 # --- 2. MATCH HISTORY DISPLAY ---
-st.subheader("🕹️ MATCH SCHEDULE & RESULTS")
+#st.subheader("🕹️ MATCH SCHEDULE & RESULTS")
+st.subheader("MATCH SCHEDULE & RESULTS")
 
 try:
     # Display the output as styled HTML table
@@ -257,6 +296,15 @@ try:
         for col in pivot_df.columns:
             if col != 'Game_ID':
                 value = row[col]
+                # Check if this player is benched in this round
+                game_id = row['Game_ID']
+                round_no = row['Round_No']
+                player_name = col
+                is_benched = not dfm[(dfm['Game_ID'] == game_id) & (dfm['Round_No'] == round_no) & (dfm['Player_Name'] == player_name) & (dfm['Player_Status'] == 'benched')].empty
+                if is_benched:
+                    value = "-"
+                elif value == "":
+                    value = ""  # Keep blank for empty active player cells
                 html_table += f'<td>{value}</td>'
         html_table += '</tr>'
     
@@ -281,7 +329,7 @@ try:
     #    st.table(filtered_view)
 
 except Exception as e:
-    st.error("Ensure your spreadsheet has 'Game_Title', 'Round_No', 'Player_Name', and 'Score' columns.")
+    st.error("Ensure your spreadsheet has 'Game_ID', 'Game_Title', 'Round_No', 'Player_Name', 'Player_Status', and 'Score' columns.")
     st.write(e)
 
 # Place this at the bottom of your sidebar or footer
