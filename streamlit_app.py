@@ -114,6 +114,10 @@ st.markdown("""
         padding-left: 0 !important;
         padding-right: 0 !important;
     }
+            
+    .main-card{
+            
+            }
 
     /* Player Cards styling */
     .player-card {
@@ -284,12 +288,12 @@ for idx, (col, (_, row)) in enumerate(zip(cols, df.iterrows())):
             try:
                 img_bytes = download_image_bytes(url)
                 img = Image.open(BytesIO(img_bytes))
-                img = ImageOps.fit(img.convert("RGB"), (175, 250), Image.LANCZOS)
+                img = ImageOps.fit(img.convert("RGB"), (215, 300), Image.LANCZOS)
 
                 if row['Name'] in benched_players:
                     img = ImageOps.grayscale(img).convert("RGB")
 
-                st.image(img, width=250)
+                st.image(img, width=300)
             except Exception as e:
                 st.error(f"Error: {str(e)}")
         
