@@ -225,7 +225,18 @@ try:
                     latest_benched = benched_in_current.iloc[0]
     benched_players = {latest_benched} if latest_benched else set()
 
-    start_images = len(benched_players) > 0
+    # The opening image is used only while the first match row has no scores.
+    start_images = False
+    if all_rounds:
+        first_game_id, first_round_no = all_rounds[0]
+        first_round = dfm[
+            (dfm['Game_ID'] == first_game_id)
+            & (dfm['Round_No'] == first_round_no)
+            & (dfm['Player_Status'] == 'active')
+        ]
+        start_images = len(first_round) > 0 and first_round['Score'].map(
+            lambda score: pd.isna(score) or str(score).strip() == ""
+        ).all()
 
     # Collapse Game_ID groups into one Total row if all player columns are populated
     collapsed_data = []
@@ -282,7 +293,9 @@ for idx, (col, (_, row)) in enumerate(zip(cols, df.iterrows())):
             url = row['benched_URL']
         elif row['Points'] == min_points and start_images:
             url = row['neutral_URL']
-        elif row['Points'] == min_points:
+        elif row['Points'] != min_points and row['Points'] != max_points:
+            url = row['neutral_URL']
+        elif row['Points'] == min_points and not start_images:
             url = row['sad_URL']    
         elif row['Points'] == max_points:
             url = row['happy_URL']
