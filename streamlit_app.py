@@ -128,11 +128,66 @@ st.markdown("""
 
     /* Player Cards styling */
     .player-card {
+        position: relative;
+        isolation: isolate;
         border: 4px solid #F5B201;
         padding: 5px;
         border-radius: 5px;
         background-color: rgba(255, 255, 255, 0.1);
         margin-bottom: 20px;
+    }
+
+    .player-card.leader-card {
+        border-color: #FFE27A;
+        box-shadow: 0 0 10px #FFE27A, 0 0 28px #FF9D00, 0 0 55px rgba(255, 61, 0, 0.8);
+        animation: divine-pulse 1.2s ease-in-out infinite alternate;
+    }
+
+    .player-card.leader-card::before {
+        content: "";
+        position: absolute;
+        inset: -8px;
+        border-radius: 12px;
+        background: conic-gradient(from 0deg, transparent, #FFF4A3, #FFF4A3, transparent 12%, #FFF4A3, transparent 25%, #FFF4A3, transparent 48%, #FFF4A3);
+        filter: blur(6px);
+        opacity: 0.35;
+        z-index: -1;
+        animation: divine-orbit 2.4s linear infinite;
+    }
+
+    .avatar-frame {
+        display: block;
+        margin: 0 auto 8px;
+        width: 215px;
+        height: 300px;
+        object-fit: cover;
+    }
+
+    .avatar-frame.leader-avatar {
+        border: 4px solid #FFF4A3;
+        border-radius: 8px;
+        box-shadow: 0 0 8px #FFF4A3, 0 0 22px #FF9D00, 0 0 42px rgba(255, 61, 0, 0.9);
+        animation: avatar-aura 1s ease-in-out infinite alternate;
+    }
+
+    @keyframes divine-orbit {
+        /*to { transform: rotate(360deg) scale(1.04); }*/
+    }
+
+    @keyframes divine-pulse {
+        from { box-shadow: 0 0 8px #FFF4A3, 0 0 20px #FF9D00, 0 0 38px rgba(255, 61, 0, 0.65); }
+        to { box-shadow: 0 0 18px #FFF4A3, 0 0 38px #FF9D00, 0 0 68px rgba(255, 61, 0, 0.95); }
+    }
+
+    @keyframes avatar-aura {
+        from { filter: brightness(1.08) saturate(1.05); }
+        to { filter: brightness(1.3) saturate(1.3); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .player-card.leader-card,
+        .player-card.leader-card::before,
+        .avatar-frame.leader-avatar { animation: none; }
     }
 
     .player-name {
@@ -173,6 +228,7 @@ st.subheader("CURRENT STANDINGS")
 
 # Import here to avoid repetition
 import requests
+import base64
 from io import BytesIO
 from PIL import Image, ImageOps
 
@@ -185,6 +241,7 @@ start_images = False
 
 # Determine benched players from match data
 benched_players = set()
+godly_players = set()
 try:
     conn2 = st.connection("gsheets_matches", type=GSheetsConnection)
     dfm = conn2.read()
@@ -208,6 +265,23 @@ try:
         for round_no in rounds:
             all_rounds.append((game_id, round_no))
     all_rounds.sort()  # Sort by game_id, round_no
+
+    # Track players who have the highest score for three consecutive rounds.
+    for game_id, game_rounds in dfm.groupby('Game_ID', sort=False):
+        completed_winners = []
+        for round_no in sorted(game_rounds['Round_No'].unique()):
+            round_data = game_rounds[game_rounds['Round_No'] == round_no]
+            active_round = round_data[round_data['Player_Status'] == 'active'].copy()
+            active_round['Numeric_Score'] = pd.to_numeric(active_round['Score'], errors='coerce')
+            if len(active_round) == 0 or active_round['Numeric_Score'].isna().any():
+                continue
+
+            highest_score = active_round['Numeric_Score'].max()
+            completed_winners.append(set(active_round.loc[
+                active_round['Numeric_Score'] == highest_score, 'Player_Name'
+            ]))
+        if len(completed_winners) >= 3:
+            godly_players.update(set.intersection(*completed_winners[-3:]))
     
     for idx, (game_id, round_no) in enumerate(all_rounds):
         if idx == 0:
@@ -313,13 +387,21 @@ for idx, (col, (_, row)) in enumerate(zip(cols, df.iterrows())):
                 if row['Name'] in benched_players:
                     img = ImageOps.grayscale(img).convert("RGB")
 
-                st.image(img, width=300)
+                image_buffer = BytesIO()
+                img.save(image_buffer, format="PNG")
+                image_data = base64.b64encode(image_buffer.getvalue()).decode("ascii")
+                avatar_class = "avatar-frame leader-avatar" if row['Name'] in godly_players else "avatar-frame"
+                st.markdown(
+                    f'<img class="{avatar_class}" src="data:image/png;base64,{image_data}" alt="{row["Name"]}">',
+                    unsafe_allow_html=True,
+                )
             except Exception as e:
                 st.error(f"Error: {str(e)}")
         
         # Display player info
+        card_class = "player-card leader-card" if row['Name'] in godly_players else "player-card"
         st.markdown(f"""
-            <div class="player-card">
+            <div class="{card_class}">
                 <div class="player-name">{row['Name'].upper()}</div>
                 <div class="player-points">{int(row['Points'])} PTS</div>
             </div>
