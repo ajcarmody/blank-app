@@ -242,6 +242,9 @@ start_images = False
 # Determine benched players from match data
 benched_players = set()
 godly_players = set()
+round_win_streaks = {
+    player_name: 0 for player_name in df['Name'].dropna()
+}
 try:
     conn2 = st.connection("gsheets_matches", type=GSheetsConnection)
     dfm = conn2.read()
@@ -266,7 +269,15 @@ try:
             all_rounds.append((game_id, round_no))
     all_rounds.sort()  # Sort by game_id, round_no
 
+    def record_completed_round(winners):
+        for player in set(round_win_streaks) | winners:
+            if player in winners:
+                round_win_streaks[player] = round_win_streaks.get(player, 0) + 1
+            else:
+                round_win_streaks[player] = 0
+
     # Track players who have the highest score for three consecutive rounds.
+    winner_history_by_game = {}
     for game_id, game_rounds in dfm.groupby('Game_ID', sort=False):
         completed_winners = []
         for round_no in sorted(game_rounds['Round_No'].unique()):
@@ -277,9 +288,12 @@ try:
                 continue
 
             highest_score = active_round['Numeric_Score'].max()
-            completed_winners.append(set(active_round.loc[
+            round_winners = set(active_round.loc[
                 active_round['Numeric_Score'] == highest_score, 'Player_Name'
-            ]))
+            ])
+            completed_winners.append(round_winners)
+            record_completed_round(round_winners)
+        winner_history_by_game[game_id] = completed_winners
         if len(completed_winners) >= 3:
             godly_players.update(set.intersection(*completed_winners[-3:]))
     
@@ -314,6 +328,7 @@ try:
 
     # Collapse Game_ID groups into one Total row if all player columns are populated
     collapsed_data = []
+
     for game_id, group in pivot_df.groupby('Game_ID', sort=False):
         if len(group) <= 1:
             # Single row: keep as-is
@@ -353,6 +368,11 @@ try:
 
     pivot_df = pd.DataFrame(collapsed_data, columns=pivot_df.columns)
     player_cols = list(pivot_df.columns[3:])
+
+    # Use the same consecutive-round counters shown in the round diagnostics.
+    godly_players.update(
+        player for player, streak in round_win_streaks.items() if streak >= 3
+    )
 except Exception as e:
     pass  # Silently ignore if match data fails
 
