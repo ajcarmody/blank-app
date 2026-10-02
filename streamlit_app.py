@@ -269,33 +269,28 @@ try:
             all_rounds.append((game_id, round_no))
     all_rounds.sort()  # Sort by game_id, round_no
 
-    def record_completed_round(winners):
-        for player in set(round_win_streaks) | winners:
+    def record_completed_round(winners, active_players):
+        for player in active_players:
             if player in winners:
                 round_win_streaks[player] = round_win_streaks.get(player, 0) + 1
             else:
                 round_win_streaks[player] = 0
 
-    # Track players who have the highest score for three consecutive rounds.
-    winner_history_by_game = {}
-    for game_id, game_rounds in dfm.groupby('Game_ID', sort=False):
-        completed_winners = []
-        for round_no in sorted(game_rounds['Round_No'].unique()):
-            round_data = game_rounds[game_rounds['Round_No'] == round_no]
-            active_round = round_data[round_data['Player_Status'] == 'active'].copy()
-            active_round['Numeric_Score'] = pd.to_numeric(active_round['Score'], errors='coerce')
-            if len(active_round) == 0 or active_round['Numeric_Score'].isna().any():
-                continue
+    # Process completed rounds in chronological order across game boundaries.
+    # A loss in the next game must reset a player's existing win streak.
+    for game_id, round_no in all_rounds:
+        round_data = dfm[(dfm['Game_ID'] == game_id) & (dfm['Round_No'] == round_no)]
+        active_round = round_data[round_data['Player_Status'] == 'active'].copy()
+        active_round['Numeric_Score'] = pd.to_numeric(active_round['Score'], errors='coerce')
+        if len(active_round) == 0 or active_round['Numeric_Score'].isna().any():
+            continue
 
-            highest_score = active_round['Numeric_Score'].max()
-            round_winners = set(active_round.loc[
-                active_round['Numeric_Score'] == highest_score, 'Player_Name'
-            ])
-            completed_winners.append(round_winners)
-            record_completed_round(round_winners)
-        winner_history_by_game[game_id] = completed_winners
-        if len(completed_winners) >= 3:
-            godly_players.update(set.intersection(*completed_winners[-3:]))
+        highest_score = active_round['Numeric_Score'].max()
+        round_winners = set(active_round.loc[
+            active_round['Numeric_Score'] == highest_score, 'Player_Name'
+        ])
+        active_players = set(active_round['Player_Name'])
+        record_completed_round(round_winners, active_players)
     
     for idx, (game_id, round_no) in enumerate(all_rounds):
         if idx == 0:
