@@ -143,6 +143,25 @@ st.markdown("""
         animation: divine-pulse 1.2s ease-in-out infinite alternate;
     }
 
+    .player-card.losing-card {
+        /*border-color: #FF4B5C;
+        box-shadow: 0 0 10px #FF4B5C, 0 0 28px #C1121F, 0 0 50px rgba(120, 0, 20, 0.8);
+        animation: losing-pulse 1.2s ease-in-out infinite alternate;*/
+    }
+
+    .custom-loser-overlay {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%) rotate(-20deg);
+        background: red;
+        color: white;
+        padding: 5px 15px;
+        font-weight: bold;
+        z-index: 2;
+        pointer-events: none;
+    }
+
     .player-card.leader-card::before {
         content: "";
         position: absolute;
@@ -174,6 +193,13 @@ st.markdown("""
         animation: avatar-aura 1s ease-in-out infinite alternate;
     }
 
+    .avatar-frame.losing-avatar {
+        /*border: 4px solid #FF4B5C;
+        border-radius: 8px;
+        box-shadow: 0 0 8px #FF4B5C, 0 0 22px #C1121F, 0 0 42px rgba(120, 0, 20, 0.9);
+        animation: losing-aura 1s ease-in-out infinite alternate;*/
+    }
+
     @keyframes divine-orbit {
         /*to { transform: rotate(360deg) scale(1.04); }*/
     }
@@ -188,10 +214,22 @@ st.markdown("""
         to { filter: brightness(1.3) saturate(1.3); }
     }
 
+    @keyframes losing-pulse {
+        /*from { box-shadow: 0 0 8px #FF4B5C, 0 0 20px #C1121F, 0 0 35px rgba(120, 0, 20, 0.65); }
+        to { box-shadow: 0 0 16px #FF4B5C, 0 0 34px #C1121F, 0 0 58px rgba(120, 0, 20, 0.95); }*/
+    }
+
+    @keyframes losing-aura {
+        /*from { filter: brightness(1.05) saturate(1.1); }
+        to { filter: brightness(1.25) saturate(1.5); }*/
+    }
+
     @media (prefers-reduced-motion: reduce) {
         .player-card.leader-card,
         .player-card.leader-card::before,
-        .avatar-frame.leader-avatar { animation: none; }
+        .avatar-frame.leader-avatar,
+        .player-card.losing-card,
+        .avatar-frame.losing-avatar { animation: none; }
     }
 
     .player-name {
@@ -246,7 +284,11 @@ start_images = False
 # Determine benched players from match data
 benched_players = set()
 godly_players = set()
+losing_streak_players = set()
 round_win_streaks = {
+    player_name: 0 for player_name in df['Name'].dropna()
+}
+round_loss_streaks = {
     player_name: 0 for player_name in df['Name'].dropna()
 }
 try:
@@ -293,8 +335,19 @@ try:
         round_winners = set(active_round.loc[
             active_round['Numeric_Score'] == highest_score, 'Player_Name'
         ])
+        lowest_score = active_round['Numeric_Score'].min()
+        round_losers = set()
+        if len(active_round) > 1:
+            round_losers = set(active_round.loc[
+                active_round['Numeric_Score'] == lowest_score, 'Player_Name'
+            ])
         active_players = set(active_round['Player_Name'])
         record_completed_round(round_winners, active_players)
+        for player in active_players:
+            if player in round_losers:
+                round_loss_streaks[player] = round_loss_streaks.get(player, 0) + 1
+            else:
+                round_loss_streaks[player] = 0
     
     for idx, (game_id, round_no) in enumerate(all_rounds):
         if idx == 0:
@@ -372,6 +425,9 @@ try:
     godly_players.update(
         player for player, streak in round_win_streaks.items() if streak >= 3
     )
+    losing_streak_players.update(
+        player for player, streak in round_loss_streaks.items() if streak >= 3
+    )
 except Exception as e:
     pass  # Silently ignore if match data fails
 
@@ -409,16 +465,35 @@ for idx, (col, (_, row)) in enumerate(zip(cols, df.iterrows())):
                 image_buffer = BytesIO()
                 img.save(image_buffer, format="PNG")
                 image_data = base64.b64encode(image_buffer.getvalue()).decode("ascii")
-                avatar_class = "avatar-frame leader-avatar" if row['Name'] in godly_players else "avatar-frame"
-                st.markdown(
-                    f'<img class="{avatar_class}" src="data:image/png;base64,{image_data}" alt="{row["Name"]}">',
-                    unsafe_allow_html=True,
-                )
+                if row['Name'] in godly_players:
+                    div_class = ""
+                    overlay_text= ""
+                    avatar_class = "avatar-frame leader-avatar"
+                elif row['Name'] in losing_streak_players:
+                    div_class = "custom-loser-overlay"
+                    avatar_class = "avatar-frame losing-avatar"
+                    overlay_text= "SHIT FOR BRAINS"
+ 
+                else:
+                    div_class = ""
+                    overlay_text= ""
+                    avatar_class = "avatar-frame"
+                st.markdown(f"""
+                                        <div>
+                                            <img class="{avatar_class}" src="data:image/png;base64,{image_data}" alt="{row["Name"]}">
+                                            <div class="{div_class}">{overlay_text}</div>
+                                        </div>
+                                        """, unsafe_allow_html=True)
             except Exception as e:
                 st.error(f"Error: {str(e)}")
         
         # Display player info
-        card_class = "player-card leader-card" if row['Name'] in godly_players else "player-card"
+        if row['Name'] in godly_players:
+            card_class = "player-card leader-card"
+        elif row['Name'] in losing_streak_players:
+            card_class = "player-card losing-card"
+        else:
+            card_class = "player-card"
         st.markdown(f"""
             <div class="{card_class}">
                 <div class="player-name">{row['Name'].upper()}</div>
