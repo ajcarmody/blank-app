@@ -156,11 +156,15 @@ st.markdown("""
     }
 
     .avatar-frame {
-        display: block;
-        margin: 0 auto 8px;
-        width: 215px;
-        height: 300px;
-        object-fit: cover;
+        display: block !important;
+        margin: 0 !important;
+        padding: 3px !important;
+        width: 100% !important;
+        max-width: none !important;
+        height: auto !important;
+        aspect-ratio: 215 / 300;
+        box-sizing: border-box;
+        object-fit: fill !important;
     }
 
     .avatar-frame.leader-avatar {
