@@ -296,7 +296,7 @@ try:
     conn2 = st.connection("gsheets_matches", type=GSheetsConnection)
     dfm = conn2.read()
     pivot_df = dfm.pivot(
-        index=['Game_ID', 'Game_Title', 'Round_No'], 
+        index=['Game_ID', 'Game', 'Round'], 
         columns='Player_Name', 
         values='Score'
     ).reset_index()
@@ -307,14 +307,14 @@ try:
 
     benched_players = set()
     latest_benched = None
-    # Collect all rounds across games, sorted by Game_ID then Round_No
+    # Collect all rounds across games, sorted by Game_ID then Round
     all_rounds = []
     for game_id in dfm['Game_ID'].unique():
         game_df = dfm[dfm['Game_ID'] == game_id]
-        rounds = sorted(game_df['Round_No'].unique())
-        for round_no in rounds:
-            all_rounds.append((game_id, round_no))
-    all_rounds.sort()  # Sort by game_id, round_no
+        rounds = sorted(game_df['Round'].unique())
+        for Round in rounds:
+            all_rounds.append((game_id, Round))
+    all_rounds.sort()  # Sort by game_id, Round
 
     def record_completed_round(winners, active_players):
         for player in active_players:
@@ -325,8 +325,8 @@ try:
 
     # Process completed rounds in chronological order across game boundaries.
     # A loss in the next game must reset a player's existing win streak.
-    for game_id, round_no in all_rounds:
-        round_data = dfm[(dfm['Game_ID'] == game_id) & (dfm['Round_No'] == round_no)]
+    for game_id, Round in all_rounds:
+        round_data = dfm[(dfm['Game_ID'] == game_id) & (dfm['Round'] == Round)]
         active_round = round_data[round_data['Player_Status'] == 'active'].copy()
         active_round['Numeric_Score'] = pd.to_numeric(active_round['Score'], errors='coerce')
         if len(active_round) == 0 or active_round['Numeric_Score'].isna().any():
@@ -350,18 +350,18 @@ try:
             else:
                 round_loss_streaks[player] = 0
     
-    for idx, (game_id, round_no) in enumerate(all_rounds):
+    for idx, (game_id, Round) in enumerate(all_rounds):
         if idx == 0:
             # For the first row in the table, use the benched player_status in that row
-            benched_in_current = dfm[(dfm['Game_ID'] == game_id) & (dfm['Round_No'] == round_no) & (dfm['Player_Status'] == 'benched')]['Player_Name']
+            benched_in_current = dfm[(dfm['Game_ID'] == game_id) & (dfm['Round'] == Round) & (dfm['Player_Status'] == 'benched')]['Player_Name']
             if len(benched_in_current) == 1:
                 latest_benched = benched_in_current.iloc[0]
         else:
             # For subsequent rows, check if the previous row is populated with values
-            prev_game_id, prev_round_no = all_rounds[idx-1]
-            prev_active = dfm[(dfm['Game_ID'] == prev_game_id) & (dfm['Round_No'] == prev_round_no) & (dfm['Player_Status'] == 'active')]
+            prev_game_id, prev_Round = all_rounds[idx-1]
+            prev_active = dfm[(dfm['Game_ID'] == prev_game_id) & (dfm['Round'] == prev_Round) & (dfm['Player_Status'] == 'active')]
             if len(prev_active) > 0 and all(prev_active['Score'].notna() & (prev_active['Score'] != '')):
-                benched_in_current = dfm[(dfm['Game_ID'] == game_id) & (dfm['Round_No'] == round_no) & (dfm['Player_Status'] == 'benched')]['Player_Name']
+                benched_in_current = dfm[(dfm['Game_ID'] == game_id) & (dfm['Round'] == Round) & (dfm['Player_Status'] == 'benched')]['Player_Name']
                 if len(benched_in_current) == 1:
                     latest_benched = benched_in_current.iloc[0]
     benched_players = {latest_benched} if latest_benched else set()
@@ -369,10 +369,10 @@ try:
     # The opening image is used only while the first match row has no scores.
     start_images = False
     if all_rounds:
-        first_game_id, first_round_no = all_rounds[0]
+        first_game_id, first_Round = all_rounds[0]
         first_round = dfm[
             (dfm['Game_ID'] == first_game_id)
-            & (dfm['Round_No'] == first_round_no)
+            & (dfm['Round'] == first_Round)
             & (dfm['Player_Status'] == 'active')
         ]
         start_images = len(first_round) > 0 and first_round['Score'].map(
@@ -391,10 +391,10 @@ try:
             has_empty = False
             for _, row in group.iterrows():
                 game_id_check = row['Game_ID']
-                round_no_check = row['Round_No']
-                active_players = dfm[(dfm['Game_ID'] == game_id_check) & (dfm['Round_No'] == round_no_check) & (dfm['Player_Status'] == 'active')]['Player_Name'].unique()
+                Round_check = row['Round']
+                active_players = dfm[(dfm['Game_ID'] == game_id_check) & (dfm['Round'] == Round_check) & (dfm['Player_Status'] == 'active')]['Player_Name'].unique()
                 for player in active_players:
-                    score_series = dfm[(dfm['Game_ID'] == game_id_check) & (dfm['Round_No'] == round_no_check) & (dfm['Player_Name'] == player)]['Score']
+                    score_series = dfm[(dfm['Game_ID'] == game_id_check) & (dfm['Round'] == Round_check) & (dfm['Player_Name'] == player)]['Score']
                     if score_series.empty or pd.isna(score_series.iloc[0]) or str(score_series.iloc[0]).strip() == "":
                         has_empty = True
                         break
@@ -404,7 +404,7 @@ try:
             if not has_empty:
                 # All populated: collapse into one Total row
                 total_row = group.iloc[0].copy()
-                total_row['Round_No'] = 'Total'
+                total_row['Round'] = 'Total'
                 for col in player_cols:
                     active_scores = dfm[(dfm['Game_ID'] == game_id) & (dfm['Player_Name'] == col) & (dfm['Player_Status'] == 'active')]['Score']
                     total = 0.0
@@ -542,9 +542,9 @@ try:
                 value = row[col]
                 # Check if this player is benched in this round
                 game_id = row['Game_ID']
-                round_no = row['Round_No']
+                Round = row['Round']
                 player_name = col
-                is_benched = not dfm[(dfm['Game_ID'] == game_id) & (dfm['Round_No'] == round_no) & (dfm['Player_Name'] == player_name) & (dfm['Player_Status'] == 'benched')].empty
+                is_benched = not dfm[(dfm['Game_ID'] == game_id) & (dfm['Round'] == Round) & (dfm['Player_Name'] == player_name) & (dfm['Player_Status'] == 'benched')].empty
                 if is_benched:
                     value = "-"
                 elif value == "":
@@ -564,16 +564,16 @@ try:
         st.write("No current benched player detected.")
 
     # Optional: Add a sidebar filter for Games
-    #all_games = ["All"] + sorted(df["Game_Title"].unique().tolist())
+    #all_games = ["All"] + sorted(df["Game"].unique().tolist())
     #game_filter = st.sidebar.selectbox("Filter by Game", all_games)
 
     #if game_filter != "All":
-    #    filtered_view = pivot_df[pivot_df["Game_Title"] == game_filter]
+    #    filtered_view = pivot_df[pivot_df["Game"] == game_filter]
     #    st.write(f"Showing results for **{game_filter}**")
     #    st.table(filtered_view)
 
 except Exception as e:
-    st.error("Ensure your spreadsheet has 'Game_ID', 'Game_Title', 'Round_No', 'Player_Name', 'Player_Status', and 'Score' columns.")
+    st.error("Ensure your spreadsheet has 'Game_ID', 'Game', 'Round', 'Player_Name', 'Player_Status', and 'Score' columns.")
     st.write(e)
 
 # Place this at the bottom of your sidebar or footer
