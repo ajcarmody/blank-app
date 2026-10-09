@@ -160,6 +160,7 @@ st.markdown("""
         font-weight: bold;
         z-index: 2;
         pointer-events: none;
+        opacity: 0.8;
     }
 
     .player-card.leader-card::before {
@@ -470,33 +471,36 @@ for idx, (col, (_, row)) in enumerate(zip(cols, df.iterrows())):
                     overlay_text= ""
                     avatar_class = "avatar-frame leader-avatar"
                 elif row['Name'] in losing_streak_players:
-                    div_class = "custom-loser-overlay"
-                    avatar_class = "avatar-frame losing-avatar"
-                    overlay_text= "SHIT FOR BRAINS"
- 
+                    div_class = ""#"custom-loser-overlay"
+                    avatar_class = ""#"avatar-frame losing-avatar"
+                    overlay_text= ""#"SHIT FOR BRAINS"
+                    avatar_class = "avatar-frame"
                 else:
                     div_class = ""
                     overlay_text= ""
                     avatar_class = "avatar-frame"
                 st.markdown(f"""
-                                        <div>
-                                            <img class="{avatar_class}" src="data:image/png;base64,{image_data}" alt="{row["Name"]}">
-                                            <div class="{div_class}">{overlay_text}</div>
-                                        </div>
-                                        """, unsafe_allow_html=True)
+                        <div>
+                            <img class="{avatar_class}" src="data:image/png;base64,{image_data}" alt="{row["Name"]}">
+                            <div class="{div_class}">{overlay_text}</div>
+                        </div>
+                        """, unsafe_allow_html=True)
             except Exception as e:
                 st.error(f"Error: {str(e)}")
         
         # Display player info
         if row['Name'] in godly_players:
             card_class = "player-card leader-card"
+            display_name = row['Name'].upper()  # Standard treatment
         elif row['Name'] in losing_streak_players:
-            card_class = "player-card losing-card"
+            card_class = "player-card"
+            display_name = "SHIT FOR BRAINS" # Standard treatment
         else:
             card_class = "player-card"
+            display_name = row['Name'].upper()  # Standard treatment
         st.markdown(f"""
             <div class="{card_class}">
-                <div class="player-name">{row['Name'].upper()}</div>
+                <div class="player-name">{display_name }</div>
                 <div class="player-points">{int(row['Points'])} PTS</div>
             </div>
             """, unsafe_allow_html=True)
